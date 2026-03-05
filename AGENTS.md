@@ -1,23 +1,33 @@
-# Agents (CLI helpers) Reference
+# Agents (Go CLI) Reference
 
-This repository exposes two tiny command “agents” for the terminal. They wrap common PDF/Markdown conversions with a simple, Pandoc‑style interface.
+This project is moving from shell aliases to a **single Go binary** that wraps macOS document/file tools behind a unified interface.
 
-See README.md for installation and environment setup.
+Goal: one predictable CLI for common file conversion and inspection tasks, while keeping each command minimal and opinionated.
 
-## Prerequisites
+See `README.md` for install/setup details.
 
-- macOS with Homebrew
-- poppler (for `pdftotext`)
-- pandoc
-- A LaTeX engine (BasicTeX is sufficient for most cases)
+## Direction
 
-## Commands
+- Primary interface: one Go CLI executable (for example: `document-tools ...`)
+- Scope: wrap existing best-of-breed tools (`pandoc`, `pdftotext`, etc.) instead of re-implementing them
+- Philosophy: simple defaults, minimal flags, consistent behavior across commands
 
-### pdf2md
+## Prerequisites (macOS)
+
+- Homebrew
+- `pandoc`
+- `poppler` (for `pdftotext`)
+- A LaTeX engine for PDF generation (BasicTeX is sufficient for most cases)
+
+## Current Command Agents
+
+These are the first two agents and should remain supported as subcommands in the Go CLI.
+
+### `pdf2md`
 
 - Synopsis: `pdf2md input.pdf [-o output.md]`
-- What it does: Uses `pdftotext -layout` to extract text, preserving spacing to approximate the original layout, then strips trailing whitespace and writes Markdown‑friendly text to a file.
-- Defaults: If `-o` is omitted, output becomes `input.md` (same basename as the input).
+- Behavior: runs `pdftotext -layout` and writes markdown-friendly text output
+- Default output: if `-o` is omitted, output is `input.md`
 
 Examples:
 ```
@@ -25,11 +35,11 @@ pdf2md invoice.pdf
 pdf2md report.pdf -o report.md
 ```
 
-### md2pdf
+### `md2pdf`
 
 - Synopsis: `md2pdf input.md [-o output.pdf]`
-- What it does: Uses `pandoc input.md -o output.pdf` to render a PDF via LaTeX.
-- Defaults: If `-o` is omitted, output becomes `input.pdf` (same basename as the input).
+- Behavior: runs `pandoc input.md -o output.pdf` (via LaTeX)
+- Default output: if `-o` is omitted, output is `input.pdf`
 
 Examples:
 ```
@@ -37,30 +47,40 @@ md2pdf notes.md
 md2pdf notes.md -o notes.pdf
 ```
 
-## Behavior and Notes
+## Unified CLI Behavior Contract
 
-- Filenames with spaces are supported (the functions quote paths).
-- If the output file exists, it will be overwritten.
-- PDF → Markdown is best‑effort; complex layouts (tables, multi‑column, figures) may need manual cleanup.
-- Pandoc PDF output relies on LaTeX. BasicTeX is minimal; you may need to install extra LaTeX packages if Pandoc requests them.
+For all agents/subcommands in the Go app:
+
+- Support quoted paths and filenames with spaces
+- Overwrite output if it already exists (unless a future command explicitly documents otherwise)
+- Use consistent error formatting
+- Return non-zero exit code on failure
+- Keep interfaces small: one input + optional `-o` unless there is a clear need for more
+
+## Notes & Limitations
+
+- PDF → Markdown remains best-effort; complex layouts may require manual cleanup
+- Pandoc PDF output depends on LaTeX packages; BasicTeX may need extra package installs
 
 ## Troubleshooting
 
-- “command not found: pdf2md/md2pdf”
-  - Ensure your shell has sourced `document-tools-alias.sh` (see README.md). Open a new terminal or `source ~/.zshrc` / `~/.bashrc`.
+- Command not found:
+  - Ensure the Go binary is installed and on `PATH`
+  - During transition, if using legacy aliases, ensure `document-tools-alias.sh` is sourced
 
-- pdf2md produces an empty/incorrect file
-  - Verify `pdftotext -v` works.
-  - Try `pdftotext -layout input.pdf -` to inspect raw output. Some PDFs (scanned images) need OCR first.
+- `pdf2md` output is empty/incorrect:
+  - Verify `pdftotext -v`
+  - Inspect raw output with `pdftotext -layout input.pdf -`
+  - Scanned PDFs may require OCR before conversion
 
-- md2pdf fails with LaTeX errors
-  - Install missing LaTeX packages (tlmgr) or use a fuller TeX distribution.
-  - Check `pandoc --version` to confirm it’s installed.
+- `md2pdf` fails with LaTeX errors:
+  - Install missing packages via `tlmgr` or use a fuller TeX distribution
+  - Verify `pandoc --version`
 
-## Extending the helpers
+## Extending the Go Agents
 
-The wrappers are intentionally minimal. If you need more control:
+When adding new wrappers, prefer:
 
-- Add default Pandoc flags (template, variables, PDF engine) in `md2pdf`.
-- Forward additional arguments by enhancing the basic `-o` parsing.
-- Post‑process `pdf2md` output (e.g., normalize headings or lists) by adjusting the `sed` step.
+- A focused command for one real workflow
+- Shared I/O and error handling in common Go utilities
+- Avoiding pass-through flag explosions; add options only when repeatedly needed
