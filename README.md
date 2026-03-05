@@ -42,3 +42,8 @@ cat notes.md | document-tools -o notes.docx
 - PDF input is extracted with `pdftotext -layout` (from `poppler`) and then converted.
 - PDF → Markdown is best effort; complex layouts may need cleanup.
 - Pandoc PDF output depends on LaTeX packages (BasicTeX may require extra packages).
+
+## CI / Release
+
+- GitHub Actions builds macOS binaries on PRs and pushes to `main`.
+- Pushing a tag like `v2.0.0` publishes build artifacts to GitHub Releases.
