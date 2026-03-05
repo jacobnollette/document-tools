@@ -1,81 +1,44 @@
 # document-tools (macOS)
 
-Minimal, focused document conversion helpers for macOS.
+Minimal, opinionated document conversion CLI.
 
-This project is moving from shell aliases to a single Go CLI binary: `document-tools`.
+## Install
 
-## What’s included
+1. Download `document-tools` binary from GitHub Releases.
+2. Move it into your PATH (example):
 
-- Installation script (macOS/Homebrew) that sets up:
-  - `pandoc` (format conversions)
-  - `poppler` (`pdftotext` for PDF input)
-  - BasicTeX (minimal LaTeX needed by Pandoc to make PDFs)
-- A Go CLI: `document-tools`
-- Legacy bash aliases (`pdf2md`, `md2pdf`) remain in the repo during transition
+```bash
+mv document-tools /usr/local/bin/document-tools
+chmod +x /usr/local/bin/document-tools
+```
 
-The goal is a tiny, opinionated toolkit: do the common thing well, avoid endless flags and preferences.
+3. Install runtime dependencies (macOS/Homebrew):
 
-## Requirements
+```bash
+brew install pandoc poppler
+brew install --cask basictex
+```
 
-- macOS (Terminal users; zsh or bash)
-- Homebrew installed
-- Internet access to install formulae/casks
-
-The install script uses Homebrew to install:
-- pandoc
-- poppler (for pdftotext)
-- basictex (LaTeX engine Pandoc uses for PDF output)
-
-Note: Some PDFs may require additional LaTeX packages. BasicTeX is minimal; Pandoc might prompt you to install missing packages as needed.
-
-## Usage (Go CLI)
-
-General shape:
+## Usage
 
 ```bash
 document-tools -i input.ext -o output.ext
 ```
 
+- `-i` optional: if omitted, reads stdin as Markdown
+- `-o` required: output format is inferred from extension
+- output files are overwritten
+
 Examples:
 
-- Markdown file → PDF
 ```bash
 document-tools -i notes.md -o notes.pdf
-```
-
-- Markdown file → HTML
-```bash
-document-tools -i notes.md -o notes.html
-```
-
-- PDF file → Markdown (uses `pdftotext -layout` first)
-```bash
 document-tools -i report.pdf -o report.md
-```
-
-- stdin Markdown → DOCX
-```bash
 cat notes.md | document-tools -o notes.docx
 ```
 
-Notes:
-- If `-i` is omitted, input is read from stdin and treated as Markdown.
-- Output format is inferred from the `-o` file extension.
-- If input is PDF, `pdftotext` is used to extract text before conversion.
-- Output files are overwritten by default.
+## Notes
 
-## How it works
-
-- Non-PDF input: read file (or stdin) and pass through `pandoc` with explicit `-f` and `-t`
-- PDF input: run `pdftotext -layout input.pdf -` first, then send extracted text to `pandoc`
-- Markdown target from Markdown source is written directly without pandoc
-
-## Limitations / Notes
-
-- PDF → Markdown is best-effort. Complex layouts (multi-column, tables, figures) may need manual cleanup.
-- The CLI intentionally keeps the interface small: optional `-i` plus required `-o`.
-- If Pandoc PDF generation complains about missing LaTeX packages, install them via tlmgr or a fuller TeX distribution.
-- If the installer fails on pandoc, verify Homebrew is installed and try:
-  - brew install pandoc
-  - brew install poppler
-  - brew install --cask basictex
+- PDF input is extracted with `pdftotext -layout` (from `poppler`) and then converted.
+- PDF → Markdown is best effort; complex layouts may need cleanup.
+- Pandoc PDF output depends on LaTeX packages (BasicTeX may require extra packages).
