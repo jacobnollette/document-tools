@@ -60,8 +60,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) err
 	if err := writeOutput(source, input, target, out); err != nil {
 		return err
 	}
-
-	fmt.Fprintf(stdout, "wrote %s\n", out)
 	return nil
 }
 
