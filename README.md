@@ -19,6 +19,25 @@ brew install pandoc poppler
 brew install --cask basictex
 ```
 
+## Build from source (with Go installed)
+
+If you already have Go installed, you can build locally:
+
+```bash
+git clone https://github.com/<your-org-or-user>/document-tools.git
+cd document-tools
+go build -o document-tools .
+./document-tools -h
+```
+
+Or install directly to your Go bin path:
+
+```bash
+go install .
+```
+
+Then ensure your Go bin directory is on `PATH` (commonly `$(go env GOPATH)/bin` or `~/go/bin`).
+
 ## Usage
 
 ```bash
@@ -45,5 +64,12 @@ cat notes.md | document-tools -o notes.docx
 
 ## CI / Release
 
-- GitHub Actions builds macOS binaries on PRs and pushes to `main`.
-- Pushing a tag like `v2.0.0` publishes build artifacts to GitHub Releases.
+- This project does **not** publish signed binaries from GitHub Actions.
+- I currently do not have a code-signing certificate available in this repo environment, so builds/signing are not done on GitHub.
+- For now, build locally if you want to run from source.
+
+## Project Intent
+
+- This is a personal hobby project.
+- It makes no claim of commercial advantage or profit over related projects/tools.
+- If you are a maintainer/owner of a related project and would like this taken down or changed, please reach out and I will address it promptly.
