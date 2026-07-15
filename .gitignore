@@ -1,1 +1,18 @@
-document-tools
+# Compiled binaries
+/document-tools
+/server
+bin/
+
+# Local document storage
+data/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/.terraform.lock.hcl
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.backup
+deploy/terraform/*.tfvars

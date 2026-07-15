@@ -1,86 +1,71 @@
-# Agents (Go CLI) Reference
+# Repository Guide
 
-This project is moving from shell aliases to a **single Go binary** that wraps macOS document/file tools behind a unified interface.
+document-tools is a self-hosted document management system: photos of receipts
+and other documents (plus PDFs and markdown) are uploaded from a phone, their
+text extracted server-side, stored in PostgreSQL, and browsed through a web
+interface with universal-format downloads. A standalone document conversion
+CLI (the project's original tool) lives alongside it.
 
-Goal: one predictable CLI for common file conversion and inspection tasks, while keeping each command minimal and opinionated.
+## Layout
 
-See `README.md` for install/setup details.
+- `cmd/server` — HTTP server: JSON API under `/api` plus the built web app
+- `cmd/document-tools` — conversion CLI wrapping `pandoc`/`pdftotext`
+- `internal/config` — first-run installer config (`config.json` in the data dir)
+- `internal/db` — Postgres connection + embedded SQL migrations
+- `internal/store` — metadata/OCR text in Postgres, original files + page previews on disk
+- `internal/auth` — users (bcrypt) and HMAC-signed session cookies
+- `internal/ocr` — processing engine (tesseract, pdftotext/pdftoppm) + async worker pool
+- `internal/convert` — download renditions: markdown/text/searchable PDF (tesseract, pandoc+typst)
+- `internal/api` — HTTP handlers; `setup.go` is the pre-install wizard API
+- `internal/testdb` — per-package Postgres test databases (skipped without `TEST_DATABASE_URL`)
+- `web/` — React + TypeScript + Vite single-page app
+- `deploy/terraform/` — home-lab stack: app + Postgres containers on a Docker host
+- `.github/workflows/` — `ci.yml` (every push/PR) and `deploy.yml` (image publish to GHCR)
 
-## Direction
+## Conventions
 
-- Primary interface: one Go CLI executable (for example: `document-tools ...`)
-- Scope: wrap existing best-of-breed tools (`pandoc`, `pdftotext`, etc.) instead of re-implementing them
-- Philosophy: simple defaults, minimal flags, consistent behavior across commands
+- **Lifecycle**: the server boots into setup mode until `config.json` exists;
+  the installer swaps in the full handler without a restart. Document status
+  flows `pending → processing → completed | failed` via `store.UpdateStatus`.
+- **Auth**: single implicit permission level — accounts have no role field;
+  never add one casually. All `/api/documents*` routes require a session.
+- **Uploads**: content type is sniffed from file bytes, never trusted from the
+  client. Allowed: images, PDF, markdown/plain text. Document IDs and stored
+  filenames are server-generated — user-supplied names must never influence paths.
+- **Storage split**: metadata and extracted text belong in Postgres; bytes
+  (originals, previews) belong on disk under the data dir. Keep it that way so
+  the filesystem can live on a shared mount.
+- **Schema changes** are new numbered files in `internal/db/migrations/` —
+  never edit an applied migration.
+- **External tools** (tesseract, poppler, pandoc, typst) are shelled out to
+  behind interfaces (`ocr.Engine`) with fakes in tests; keep handlers free of
+  exec calls.
+- **Frontend**: keep dependencies minimal (react, react-router-dom). The build
+  must pass `tsc --noEmit` (strict mode) — `npm run build` enforces it.
 
-## Prerequisites (macOS)
+## Checks to run before pushing
 
-- Homebrew
-- `pandoc`
-- `poppler` (for `pdftotext`)
-- A LaTeX engine for PDF generation (BasicTeX is sufficient for most cases)
-
-## Current Command Agents
-
-These are the first two agents and should remain supported as subcommands in the Go CLI.
-
-### `pdf2md`
-
-- Synopsis: `pdf2md input.pdf [-o output.md]`
-- Behavior: runs `pdftotext -layout` and writes markdown-friendly text output
-- Default output: if `-o` is omitted, output is `input.md`
-
-Examples:
+```bash
+gofmt -l .            # must print nothing
+go vet ./...
+# database tests need Postgres:
+#   docker run -d -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -p 15432:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgres://test:test@localhost:15432/test?sslmode=disable go test ./...
+cd web && npm run build
+terraform -chdir=deploy/terraform fmt -check   # if terraform is installed
 ```
-pdf2md invoice.pdf
-pdf2md report.pdf -o report.md
-```
 
-### `md2pdf`
+CI runs all of the above plus a Docker image build with an HTTP smoke test.
 
-- Synopsis: `md2pdf input.md [-o output.pdf]`
-- Behavior: runs `pandoc input.md -o output.pdf` (via LaTeX)
-- Default output: if `-o` is omitted, output is `input.pdf`
+## Local development
 
-Examples:
-```
-md2pdf notes.md
-md2pdf notes.md -o notes.pdf
-```
+- API: `go run ./cmd/server` (install `tesseract-ocr` + `poppler-utils`, and
+  `pandoc` + `typst` for PDF downloads)
+- Web: `cd web && npm run dev` (proxies `/api` to `localhost:8080`)
+- Full stack: see the Docker instructions in `README.md`
 
-## Unified CLI Behavior Contract
+## Deployment status
 
-For all agents/subcommands in the Go app:
-
-- Support quoted paths and filenames with spaces
-- Overwrite output if it already exists (unless a future command explicitly documents otherwise)
-- Use consistent error formatting
-- Return non-zero exit code on failure
-- Keep interfaces small: one input + optional `-o` unless there is a clear need for more
-
-## Notes & Limitations
-
-- PDF → Markdown remains best-effort; complex layouts may require manual cleanup
-- Pandoc PDF output depends on LaTeX packages; BasicTeX may need extra package installs
-
-## Troubleshooting
-
-- Command not found:
-  - Ensure the Go binary is installed and on `PATH`
-  - During transition, if using legacy aliases, ensure `document-tools-alias.sh` is sourced
-
-- `pdf2md` output is empty/incorrect:
-  - Verify `pdftotext -v`
-  - Inspect raw output with `pdftotext -layout input.pdf -`
-  - Scanned PDFs may require OCR before conversion
-
-- `md2pdf` fails with LaTeX errors:
-  - Install missing packages via `tlmgr` or use a fuller TeX distribution
-  - Verify `pandoc --version`
-
-## Extending the Go Agents
-
-When adding new wrappers, prefer:
-
-- A focused command for one real workflow
-- Shared I/O and error handling in common Go utilities
-- Avoiding pass-through flag explosions; add options only when repeatedly needed
+Images publish to GHCR from `main`. The Terraform stack targets a home-lab
+Docker host and is applied manually from a machine that can reach it — see
+`deploy/terraform/terraform.tfvars.example`. Nothing applies automatically.
