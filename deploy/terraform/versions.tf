@@ -2,30 +2,25 @@ terraform {
   required_version = ">= 1.7.0"
 
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.60"
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 3.0"
     }
   }
-
-  # Remote state is intentionally not configured yet. Before the first apply,
-  # add an S3 backend here (bucket + DynamoDB lock table) so state is shared:
-  #
-  # backend "s3" {
-  #   bucket         = "<state-bucket>"
-  #   key            = "document-tools/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "<lock-table>"
-  # }
 }
 
-provider "aws" {
-  region = var.aws_region
+# Points at the home-lab Docker host. Local socket by default; set
+# docker_host to an ssh:// URL to apply from another machine, e.g.
+# ssh://user@dockerhost.lab.
+provider "docker" {
+  host = var.docker_host
 
-  default_tags {
-    tags = {
-      Project   = "document-tools"
-      ManagedBy = "terraform"
+  dynamic "registry_auth" {
+    for_each = var.registry_username != "" ? [1] : []
+    content {
+      address  = var.registry_address
+      username = var.registry_username
+      password = var.registry_password
     }
   }
 }

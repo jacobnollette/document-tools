@@ -4,6 +4,8 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App";
 import DocumentListPage from "./pages/DocumentListPage";
 import DocumentDetailPage from "./pages/DocumentDetailPage";
+import LoginPage from "./pages/LoginPage";
+import SetupPage from "./pages/SetupPage";
 import "./styles.css";
 
 const router = createBrowserRouter([
@@ -13,6 +15,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DocumentListPage /> },
       { path: "documents/:id", element: <DocumentDetailPage /> },
+      { path: "login", element: <LoginPage /> },
+      { path: "setup", element: <SetupPage /> },
     ],
   },
 ]);

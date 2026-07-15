@@ -1,54 +1,86 @@
 # document-tools
 
 A self-hosted document management system. Upload receipts and other documents
-from your phone, let the server extract their text with OCR, and browse
-everything from a web interface.
+from your phone, let the server extract their text with OCR, and browse,
+search-ready, from a web interface.
 
-The MVP pipeline: **photo upload → OCR (Tesseract) → searchable text in the web UI**.
+The pipeline: **upload (photo, PDF, or markdown) → text extraction → stored in
+PostgreSQL, browsable and downloadable in a universal format**.
 
 ## Architecture
 
 | Component | Location | Stack |
 | --- | --- | --- |
-| API server | `cmd/server`, `internal/` | Go (stdlib only), Tesseract for OCR |
+| API server | `cmd/server`, `internal/` | Go, PostgreSQL, Tesseract + poppler + pandoc |
 | Web app | `web/` | React + TypeScript + Vite |
 | Conversion CLI | `cmd/document-tools` | Go wrapper around pandoc/pdftotext |
-| Infrastructure | `deploy/terraform/` | AWS: ECR, ECS Fargate, EFS, ALB |
-| Pipelines | `.github/workflows/` | CI on every push/PR, manual deploy |
+| Infrastructure | `deploy/terraform/` | Terraform → home-lab Docker host |
+| Pipelines | `.github/workflows/` | CI on every push/PR; image publish to GHCR |
 
-Documents are stored on the filesystem (`DATA_DIR`) — one directory per
-document holding the original image, extracted text, and metadata. OCR runs
-asynchronously in an in-process worker pool; documents move through
-`pending → processing → completed | failed` and the UI polls until they settle.
+- **Originals stay originals**: uploaded files are kept byte-for-byte on the
+  local filesystem (`DATA_DIR`, typically a shared-storage mount), one
+  directory per document alongside rendered page previews.
+- **Text lives in the database**: extracted text and metadata go into
+  PostgreSQL (with a full-text search index ready for a search feature).
+- **Universal formats on the way out**: any document can be downloaded as the
+  original, Markdown, plain text, or PDF — searchable PDF via Tesseract for
+  images, pandoc/typst for markdown.
+- **Processing** is async: `pending → processing → completed | failed`, with
+  interrupted documents re-queued on startup. Images are OCRed with Tesseract;
+  PDFs use their embedded text layer when present and are OCRed page by page
+  when scanned.
+
+## First-run installer
+
+The app installs itself WordPress-style. On first launch it serves a setup
+wizard that asks for PostgreSQL connection details and creates the first user
+account (every account has full access — there are no roles). `DB_HOST`,
+`DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSLMODE` environment
+variables pre-fill the form; everything stays editable in the browser. The
+installer connects, creates the schema, saves `config.json` into the data
+directory, and logs you in.
 
 ### API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/documents` | Upload an image (multipart field `file`, 25 MB max) |
-| `GET` | `/api/documents` | List documents, newest first |
-| `GET` | `/api/documents/{id}` | Metadata plus extracted text once completed |
-| `GET` | `/api/documents/{id}/file` | The original image |
+| `GET` | `/api/setup/status` | Install state (+ env-derived defaults pre-install) |
+| `POST` | `/api/setup` | Run the installer (pre-install only) |
+| `POST` | `/api/auth/login` / `logout` | Session management |
+| `GET` | `/api/auth/me` | Current user |
+| `POST` | `/api/documents` | Upload (multipart `file`, 50 MB max) |
+| `GET` | `/api/documents` | List, newest first |
+| `GET` | `/api/documents/{id}` | Metadata + extracted text |
+| `GET` | `/api/documents/{id}/file` | Original file |
+| `GET` | `/api/documents/{id}/pages/{n}` | Rendered page preview |
+| `GET` | `/api/documents/{id}/download?format=` | `original`, `markdown`, `text`, or `pdf` |
 | `DELETE` | `/api/documents/{id}` | Remove a document |
-| `GET` | `/api/healthz` | Health check |
+
+All document routes require a session.
 
 ## Running locally
 
-### With Docker (includes Tesseract)
+### With Docker
 
 ```bash
 docker build -t document-tools .
-docker run -p 8080:8080 -v document-tools-data:/data document-tools
+docker run -d --name documents-db -e POSTGRES_USER=documents \
+  -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=documents postgres:16-alpine
+docker run -p 8080:8080 --link documents-db:db \
+  -e DB_HOST=db -e DB_USER=documents -e DB_PASSWORD=secret \
+  -v document-tools-data:/data document-tools
 ```
 
-Open http://localhost:8080.
+Open http://localhost:8080 and complete the installer (the DB fields arrive
+pre-filled from the environment).
 
 ### For development
 
-Backend (install `tesseract-ocr` locally for working OCR):
+Backend (needs `tesseract-ocr`, `poppler-utils`, and optionally
+`pandoc` + `typst` on PATH for full functionality):
 
 ```bash
-go run ./cmd/server        # API on :8080
+go run ./cmd/server        # API on :8080, serves the setup wizard first
 ```
 
 Frontend with hot reload (proxies `/api` to :8080):
@@ -59,24 +91,32 @@ npm install
 npm run dev                # UI on :5173
 ```
 
-Tests:
+Tests (database tests need Postgres):
 
 ```bash
+docker run -d -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -p 15432:5432 postgres:16-alpine
+export TEST_DATABASE_URL=postgres://test:test@localhost:15432/test?sslmode=disable
 go test ./...
 cd web && npm run build    # type-checks and builds
 ```
 
-## Deployment
+## Deployment (home lab)
 
-The Terraform stack in `deploy/terraform/` provisions an ECR repository, an
-ECS Fargate service with an EFS volume for document storage, and an ALB. It
-has **not been applied yet** — the `Deploy` workflow is manual-trigger only.
-Setup steps (state backend, OIDC role, repository variables) are documented at
-the top of [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+Images are published to GHCR by the `Build & Publish` workflow on every push
+to `main`. The Terraform stack in `deploy/terraform/` deploys the app and
+PostgreSQL to a Docker host, with all persistent state under a single
+`data_root` directory — point it at your shared-storage mount (Ceph, NFS,
+SMB, or a plain disk):
 
-CI runs on every push and pull request: Go format/vet/test, web type-check and
-build, a container image build with an HTTP smoke test, and
-`terraform fmt`/`validate`.
+```bash
+cd deploy/terraform
+cp terraform.tfvars.example terraform.tfvars   # edit data_root, db_password, ...
+terraform init
+terraform apply
+```
+
+Run the apply from any machine that can reach the Docker host (set
+`docker_host = "ssh://user@host"` for remote applies).
 
 ## Conversion CLI
 

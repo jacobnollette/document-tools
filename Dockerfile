@@ -14,10 +14,15 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 RUN CGO_ENABLED=0 go build -trimpath -o /out/server ./cmd/server
 
-# Stage 3: runtime with tesseract for OCR
+# Stage 3: runtime with the document toolchain — tesseract for OCR, poppler
+# for PDF text/preview extraction, pandoc + typst for markdown → PDF.
 FROM alpine:3.20
-RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng ca-certificates \
-    && adduser -D -H app \
+RUN apk add --no-cache \
+    tesseract-ocr tesseract-ocr-data-eng \
+    poppler-utils \
+    pandoc-cli typst \
+    ca-certificates \
+    && adduser -D app \
     && mkdir -p /data && chown app /data
 
 COPY --from=build /out/server /usr/local/bin/server

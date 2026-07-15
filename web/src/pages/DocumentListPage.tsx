@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { listDocuments, documentFileUrl, type Doc } from "../api";
+import { documentPageUrl, listDocuments, type Doc } from "../api";
 import StatusBadge from "../components/StatusBadge";
 import UploadButton from "../components/UploadButton";
 
@@ -26,7 +26,7 @@ export default function DocumentListPage() {
     void refresh();
   }, [refresh]);
 
-  // Keep polling while anything is still moving through the OCR pipeline.
+  // Keep polling while anything is still moving through the pipeline.
   const hasActive = docs.some(
     (d) => d.status === "pending" || d.status === "processing",
   );
@@ -48,7 +48,10 @@ export default function DocumentListPage() {
       {loaded && docs.length === 0 && !error && (
         <div className="empty-state">
           <p>No documents yet.</p>
-          <p>Upload a receipt photo to get started — it will be OCRed automatically.</p>
+          <p>
+            Upload a receipt photo or a PDF to get started — text is extracted
+            automatically.
+          </p>
         </div>
       )}
 
@@ -57,12 +60,21 @@ export default function DocumentListPage() {
           <li key={doc.id} className="doc-card">
             <Link to={`/documents/${encodeURIComponent(doc.id)}`}>
               <div className="doc-thumb">
-                <img src={documentFileUrl(doc.id)} alt={doc.original_filename} loading="lazy" />
+                {doc.content_type.startsWith("text/") ? (
+                  <div className="doc-thumb-text">📝</div>
+                ) : (
+                  <img
+                    src={documentPageUrl(doc.id, 1)}
+                    alt={doc.original_filename}
+                    loading="lazy"
+                  />
+                )}
               </div>
               <div className="doc-meta">
                 <span className="doc-name">{doc.original_filename}</span>
                 <span className="doc-date">
                   {new Date(doc.uploaded_at).toLocaleString()}
+                  {doc.page_count > 1 && <> · {doc.page_count} pages</>}
                 </span>
                 <StatusBadge status={doc.status} />
               </div>

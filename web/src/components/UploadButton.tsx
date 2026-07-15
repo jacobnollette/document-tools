@@ -34,7 +34,7 @@ export default function UploadButton({ onUploaded }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.pdf,.md,.txt"
         multiple
         hidden
         onChange={(e) => handleFiles(e.target.files)}
@@ -44,7 +44,7 @@ export default function UploadButton({ onUploaded }: Props) {
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
-        {busy ? "Uploading…" : "＋ Upload receipt"}
+        {busy ? "Uploading…" : "＋ Upload"}
       </button>
       {error && <p className="error-text">{error}</p>}
     </div>

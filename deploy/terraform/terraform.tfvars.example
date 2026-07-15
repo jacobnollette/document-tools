@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is gitignored.
+
+# Remote home-lab Docker host (or leave default for the local socket).
+# docker_host = "ssh://deploy@dockerhost.lab"
+
+# Shared storage mount for all persistent state (Ceph/NFS/SMB path on the host).
+data_root = "/mnt/storage/document-tools"
+
+# Image published by the Build & Publish workflow.
+image     = "ghcr.io/jacobnollette/document-tools"
+image_tag = "latest"
+
+# Database credentials — these also pre-fill the first-run installer.
+db_user     = "documents"
+db_password = "change-me"
+db_name     = "documents"
+
+app_port = 8080
+
+# Only needed while the GHCR image is private:
+# registry_username = "jacobnollette"
+# registry_password = "<a GitHub token with read:packages>"

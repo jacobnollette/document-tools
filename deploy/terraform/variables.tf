@@ -1,41 +1,75 @@
-variable "aws_region" {
-  description = "AWS region to deploy into."
+variable "docker_host" {
+  description = "Docker daemon to deploy to. Use ssh://user@host to target the home-lab host remotely."
   type        = string
-  default     = "us-east-1"
+  default     = "unix:///var/run/docker.sock"
 }
 
 variable "name" {
-  description = "Base name for all resources."
+  description = "Base name for containers, network, and volumes."
   type        = string
   default     = "document-tools"
 }
 
+variable "image" {
+  description = "App container image (pushed by the build pipeline)."
+  type        = string
+  default     = "ghcr.io/jacobnollette/document-tools"
+}
+
 variable "image_tag" {
-  description = "Container image tag to deploy (set by the deploy pipeline)."
+  description = "App image tag to deploy."
   type        = string
   default     = "latest"
 }
 
-variable "container_port" {
-  description = "Port the server listens on inside the container."
+variable "registry_address" {
+  description = "Container registry host, for pulling the app image."
+  type        = string
+  default     = "ghcr.io"
+}
+
+variable "registry_username" {
+  description = "Registry username. Leave empty for anonymous pulls (public images)."
+  type        = string
+  default     = ""
+}
+
+variable "registry_password" {
+  description = "Registry password or token. Only used when registry_username is set."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "data_root" {
+  description = <<-EOT
+    Host directory for all persistent state — point this at the shared
+    storage mount (Ceph/NFS/SMB). Two subdirectories are used:
+    <data_root>/app (config + document files) and <data_root>/postgres.
+  EOT
+  type        = string
+}
+
+variable "app_port" {
+  description = "Host port the web interface is published on."
   type        = number
   default     = 8080
 }
 
-variable "desired_count" {
-  description = "Number of running tasks. Keep at 1 while storage is a single EFS-backed data directory."
-  type        = number
-  default     = 1
+variable "db_user" {
+  description = "PostgreSQL user, also pre-filled into the first-run installer."
+  type        = string
+  default     = "documents"
 }
 
-variable "cpu" {
-  description = "Fargate task CPU units (256 = 0.25 vCPU)."
-  type        = number
-  default     = 256
+variable "db_password" {
+  description = "PostgreSQL password, also pre-filled into the first-run installer."
+  type        = string
+  sensitive   = true
 }
 
-variable "memory" {
-  description = "Fargate task memory in MiB."
-  type        = number
-  default     = 512
+variable "db_name" {
+  description = "PostgreSQL database name."
+  type        = string
+  default     = "documents"
 }
