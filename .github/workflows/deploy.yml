@@ -1,0 +1,72 @@
+# Deploy pipeline: builds the container image, pushes it to ECR, and applies
+# the Terraform stack. Manual-trigger only for now — nothing is deployed until
+# the AWS side is configured and someone runs this workflow.
+#
+# One-time setup before the first run:
+#   1. Create an IAM role for GitHub OIDC with permissions for ECR, ECS, EFS,
+#      ELB, IAM (scoped to this stack), and CloudWatch Logs, and set its ARN
+#      as the repository variable AWS_ROLE_ARN.
+#   2. Set the repository variable AWS_REGION (must match var.aws_region).
+#   3. Configure the S3 state backend in deploy/terraform/versions.tf.
+#   4. The ECR repository is created by Terraform, so the very first run may
+#      need a bootstrap apply (terraform apply -target=aws_ecr_repository.app)
+#      before the image push step can succeed.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write # for AWS OIDC federation
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'deploy'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/document-tools:${IMAGE_TAG}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+
+      - name: Terraform apply
+        working-directory: deploy/terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve \
+            -var "aws_region=${{ vars.AWS_REGION }}" \
+            -var "image_tag=${IMAGE_TAG}"
+
+      - name: Show application URL
+        working-directory: deploy/terraform
+        run: terraform output app_url
